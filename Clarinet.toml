@@ -4,6 +4,10 @@ authors = []
 description = ""
 telemetry = false
 requirements = []
+[contracts.zentide-content]
+path = "contracts/zentide-content.clar"
+depends_on = []
+
 [contracts.zentide-core]
 path = "contracts/zentide-core.clar"
 depends_on = []
