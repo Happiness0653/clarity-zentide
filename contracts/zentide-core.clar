@@ -5,7 +5,18 @@
 (define-constant err-owner-only (err u100))
 (define-constant err-not-found (err u101)) 
 (define-constant err-already-exists (err u102))
-(define-constant STREAK_THRESHOLD u86400) ;; 24 hours in blocks (assuming 1 block/sec)
+(define-constant err-invalid-streak (err u103))
+(define-constant err-invalid-achievement (err u104))
+(define-constant STREAK_THRESHOLD u86400) ;; 24 hours in blocks
+(define-constant MAX_STREAK u365) ;; Maximum realistic streak (1 year)
+
+;; Events
+(define-data-var last-event-id uint u0)
+(define-map events uint {
+  event-type: (string-ascii 20),
+  user: principal,
+  data: (string-ascii 50)
+})
 
 ;; Data vars
 (define-map users principal 
@@ -26,17 +37,32 @@
   }
 )
 
+;; Private functions
+(define-private (emit-event (event-type (string-ascii 20)) (user principal) (data (string-ascii 50)))
+  (let ((event-id (var-get last-event-id)))
+    (map-set events event-id {
+      event-type: event-type,
+      user: user,
+      data: data
+    })
+    (var-set last-event-id (+ event-id u1))
+    true
+  )
+)
+
 ;; Public functions
 (define-public (register-user)
   (begin
     (asserts! (is-none (map-get? users tx-sender)) err-already-exists)
-    (ok (map-set users tx-sender {
+    (map-set users tx-sender {
       streaks: u0,
       total-sessions: u0,
       last-session: u0,
       achievements: (list),
       current-streak: u0
-    }))
+    })
+    (emit-event "user_registered" tx-sender "")
+    (ok true)
   )
 )
 
@@ -47,18 +73,24 @@
     (last-session (get last-session user))
     (current-streak (get current-streak user))
     (streaks (get streaks user))
-    (new-streak (if (< (- current-time last-session) STREAK_THRESHOLD)
-      (+ current-streak u1)
-      u1))
+    (new-streak (if (is-eq last-session u0)
+      u1
+      (if (< (- current-time last-session) STREAK_THRESHOLD)
+        (+ current-streak u1)
+        u1)))
   )
-    (ok (map-set users tx-sender 
+    (asserts! (>= current-time last-session) err-invalid-streak)
+    (asserts! (<= new-streak MAX_STREAK) err-invalid-streak)
+    (map-set users tx-sender 
       (merge user {
         total-sessions: (+ (get total-sessions user) u1),
         last-session: current-time,
         current-streak: new-streak,
         streaks: (if (> new-streak streaks) new-streak streaks)
       })
-    ))
+    )
+    (emit-event "session_logged" tx-sender (concat "streak: " (to-ascii new-streak)))
+    (ok true)
   )
 )
 
