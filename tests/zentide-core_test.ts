@@ -41,3 +41,35 @@ Clarinet.test({
     assertEquals(stats['current-streak'], types.uint(1));
   },
 });
+
+Clarinet.test({
+  name: "Ensure streak validation works correctly",
+  async fn(chain: Chain, accounts: Map<string, Account>) {
+    const wallet_1 = accounts.get("wallet_1")!;
+    
+    let block = chain.mineBlock([
+      Tx.contractCall("zentide-core", "register-user", [], wallet_1.address)
+    ]);
+    
+    // Simulate unrealistic streak
+    for (let i = 0; i < 366; i++) {
+      chain.mineBlock([]);
+    }
+    
+    block = chain.mineBlock([
+      Tx.contractCall("zentide-core", "log-session", [], wallet_1.address)
+    ]);
+    
+    block.receipts[0].result.expectOk().expectBool(true);
+    
+    let user_stats = chain.callReadOnlyFn(
+      "zentide-core",
+      "get-user-stats",
+      [types.principal(wallet_1.address)],
+      wallet_1.address
+    );
+    
+    let stats = user_stats.result.expectOk().expectSome();
+    assertEquals(stats['current-streak'], types.uint(1));
+  },
+});
